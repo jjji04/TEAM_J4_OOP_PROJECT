@@ -1,0 +1,19 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/*.log
+.idea/
+*.iml
+# Java build output
+*.class
+bin/
+out/
+target/
+build/
+.gradle/
+# Local/secrets
+.env
+.env.*
+!.env.example
+*.log
+# Keep intentional sample data only; do not commit real customer data
