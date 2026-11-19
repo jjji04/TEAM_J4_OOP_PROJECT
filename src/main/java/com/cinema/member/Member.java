@@ -13,6 +13,8 @@ import java.util.HexFormat;
  */
 public class Member {
     private static final int MIN_PASSWORD_LENGTH = 4;
+    public static final int MIN_USABLE_POINTS = 1_000; // 이만큼 모여야 포인트 사용 가능
+    public static final int POINT_USE_UNIT = 100;      // 100P 단위로만 사용
 
     private final String id;        // 예: U001
     private String name;
@@ -49,15 +51,29 @@ public class Member {
         return earned;
     }
 
-    /** 포인트 사용 (결제 시 차감). 써도 누적 결제금액은 그대로라 등급 유지 */
+    /**
+     * 포인트 사용 (결제 시 차감). 써도 누적 결제금액은 그대로라 등급 유지.
+     * 규칙: 보유 1,000P 이상일 때만, 100P 단위로, 보유량 이내에서
+     */
     public void usePoints(int amount) {
         if (amount <= 0) {
             throw new IllegalArgumentException("사용할 포인트는 0보다 커야 합니다: " + amount);
+        }
+        if (points < MIN_USABLE_POINTS) {
+            throw new IllegalArgumentException("포인트는 " + MIN_USABLE_POINTS + "P 이상 모여야 사용할 수 있습니다. (보유 " + points + "P)");
+        }
+        if (amount % POINT_USE_UNIT != 0) {
+            throw new IllegalArgumentException("포인트는 " + POINT_USE_UNIT + "P 단위로 사용할 수 있습니다: " + amount);
         }
         if (amount > points) {
             throw new IllegalArgumentException("포인트가 부족합니다. (보유 " + points + "P, 요청 " + amount + "P)");
         }
         points -= amount;
+    }
+
+    /** 지금 포인트를 쓸 수 있는 상태인지 (화면에서 "포인트 사용" 메뉴 보여줄지 판단용) */
+    public boolean canUsePoints() {
+        return points >= MIN_USABLE_POINTS;
     }
 
     private void updateGrade() {
