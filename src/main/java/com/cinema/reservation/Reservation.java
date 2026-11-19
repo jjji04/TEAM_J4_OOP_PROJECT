@@ -79,4 +79,17 @@ public class Reservation {
     public ReservationStatus getStatus() {
         return status;
     }
+
+    /** 예약을 취소한다. 삭제하지 않고 상태만 CANCELLED로 바꾼다. */
+    public void cancel() {
+        if (status == ReservationStatus.CANCELLED) {
+            throw new IllegalStateException("이미 취소된 예약입니다: " + reservationId);
+        }
+        status = ReservationStatus.CANCELLED;
+    }
+
+    /** 취소되지 않고 유효한 예약인지 */
+    public boolean isActive() {
+        return status == ReservationStatus.RESERVED;
+    }
 }
