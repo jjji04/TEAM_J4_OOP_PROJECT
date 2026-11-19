@@ -34,6 +34,33 @@ public class Member {
         this.grade = MembershipGrade.BASIC;
     }
 
+    /** 파일에서 불러올 때 전용 생성자 (이미 해시된 비밀번호를 그대로 받음) */
+    private Member(String id, String name, String phone, String passwordHash,
+                   int points, long totalPaidAmount) {
+        this.id = requireText(id, "회원 ID");
+        this.name = requireText(name, "이름");
+        this.phone = requirePhone(phone);
+        if (passwordHash == null || !passwordHash.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("저장된 비밀번호 값이 올바르지 않습니다.");
+        }
+        if (points < 0 || totalPaidAmount < 0) {
+            throw new IllegalArgumentException("포인트·누적 결제금액은 0 이상이어야 합니다.");
+        }
+        this.passwordHash = passwordHash;
+        this.points = points;
+        this.totalPaidAmount = totalPaidAmount;
+        this.grade = MembershipGrade.of(totalPaidAmount); // 등급은 저장하지 않고 다시 계산
+    }
+
+    /**
+     * 저장 파일 → Member 복원. 같은 패키지(DataManager)에서만 호출 가능.
+     * 외부에서 포인트·결제금액을 마음대로 넣은 회원을 만들지 못하게 package-private
+     */
+    static Member restore(String id, String name, String phone, String passwordHash,
+                          int points, long totalPaidAmount) {
+        return new Member(id, name, phone, passwordHash, points, totalPaidAmount);
+    }
+
     // ===== 결제·포인트·등급 =====
 
     /**
@@ -148,6 +175,9 @@ public class Member {
     public int getPoints() { return points; }
     public long getTotalPaidAmount() { return totalPaidAmount; }
     public MembershipGrade getGrade() { return grade; }
+
+    /** 저장용. public이 아니라 같은 패키지(DataManager)만 접근 가능 */
+    String getPasswordHash() { return passwordHash; }
 
     @Override
     public String toString() {

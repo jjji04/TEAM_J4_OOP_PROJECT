@@ -57,6 +57,30 @@ public class MemberManager {
         member.changePhone(newPhone);
     }
 
+    /**
+     * 파일에서 불러온 회원 등록 (DataManager 전용, package-private).
+     * 다음 가입자 번호가 겹치지 않도록 nextNumber를 가장 큰 번호 + 1로 맞춘다
+     */
+    void restore(Member member) {
+        if (members.containsKey(member.getId())) {
+            throw new IllegalArgumentException("중복된 회원 ID: " + member.getId());
+        }
+        if (findByPhone(member.getPhone()) != null) {
+            throw new IllegalArgumentException("중복된 전화번호: " + member.getPhone());
+        }
+        members.put(member.getId(), member);
+        String digits = member.getId().replaceAll("\\D", "");
+        if (!digits.isEmpty()) {
+            nextNumber = Math.max(nextNumber, Integer.parseInt(digits) + 1);
+        }
+    }
+
+    /** 불러오기 전에 기존 데이터 비우기 (DataManager 전용) */
+    void clear() {
+        members.clear();
+        nextNumber = 1;
+    }
+
     /** 전화번호로 회원 찾기. 없으면 null (내부 중복 검사용) */
     private Member findByPhone(String phone) {
         for (Member m : members.values()) {
