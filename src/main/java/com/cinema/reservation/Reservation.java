@@ -2,7 +2,7 @@ package com.cinema.reservation;
 
 import com.cinema.member.Member;
 import com.cinema.movie.Screening;
-import com.cinema.ticket.Ticket;
+import com.cinema.pricing.Ticket;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
