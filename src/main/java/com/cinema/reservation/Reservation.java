@@ -12,6 +12,7 @@ import java.util.List;
 /**
  * 한 번의 예약 정보. 어떤 회원이, 어느 상영의, 어떤 좌석을, 어떤 티켓으로 예약했는지 담는다.
  * 좌석별 가용 여부는 이 예약들을 조회해서 계산한다(Seat에는 예약 여부를 두지 않는다).
+ * 처음에는 결제 대기(PENDING)로 만들어지고, 결제가 성공하면 confirm()으로 확정(RESERVED)된다.
  */
 public class Reservation {
     private final int reservationId;
@@ -45,7 +46,7 @@ public class Reservation {
         this.tickets = new ArrayList<>(tickets);
         this.totalPrice = totalPrice;
         this.reservedAt = LocalDateTime.now();
-        this.status = ReservationStatus.RESERVED;
+        this.status = ReservationStatus.PENDING;
     }
 
     public int getReservationId() {
@@ -80,7 +81,15 @@ public class Reservation {
         return status;
     }
 
-    /** 예약을 취소한다. 삭제하지 않고 상태만 CANCELLED로 바꾼다. */
+    /** 결제가 성공했을 때 호출한다. 결제 대기(PENDING)인 예약만 확정할 수 있다. */
+    public void confirm() {
+        if (status != ReservationStatus.PENDING) {
+            throw new IllegalStateException("결제 대기 상태의 예약만 확정할 수 있습니다: " + reservationId + " (" + status + ")");
+        }
+        status = ReservationStatus.RESERVED;
+    }
+
+    /** 예약을 취소한다. 삭제하지 않고 상태만 CANCELLED로 바꾼다. 결제 실패 처리에도 쓴다. */
     public void cancel() {
         if (status == ReservationStatus.CANCELLED) {
             throw new IllegalStateException("이미 취소된 예약입니다: " + reservationId);
@@ -88,8 +97,13 @@ public class Reservation {
         status = ReservationStatus.CANCELLED;
     }
 
-    /** 취소되지 않고 유효한 예약인지 */
+    /** 좌석을 점유하고 있는 예약인지 (결제 대기 또는 확정). 취소된 예약은 점유하지 않는다. */
     public boolean isActive() {
+        return status != ReservationStatus.CANCELLED;
+    }
+
+    /** 결제까지 끝나 확정된 예약인지 */
+    public boolean isConfirmed() {
         return status == ReservationStatus.RESERVED;
     }
 }
