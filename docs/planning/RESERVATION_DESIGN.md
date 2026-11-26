@@ -11,15 +11,19 @@
 - **좌석을 먼저 잡고 결제로 확정한다.** 실제 티켓팅처럼 예약은 결제 대기(`PENDING`)로 시작하고, 결제 성공이면 `RESERVED`, 실패면 `CANCELLED`가 된다. 결제 대기 중에도 좌석은 점유된다.
 
 ```
-ReservationManager ──> SeatManager ──> Theater (A)
+ReservationService ──> MemberManager (D)
+        │          ──> MovieService (A)
+        │          ──> PriceService (C)
         │
-        └──> Reservation ──> Member (D), Screening (A), Ticket (C)
-                  │
-                  ├──> Seat
-                  └──> ReservationStatus
+        └──> ReservationManager ──> SeatManager ──> Theater (A)
+                    │
+                    └──> Reservation ──> Member (D), Screening (A), Ticket (C)
+                              │
+                              ├──> Seat
+                              └──> ReservationStatus
 ```
 
-내 패키지가 A, C, D 클래스를 가져다 쓰고, 그쪽은 내 클래스를 모른다 (단방향 의존).
+내 패키지가 A, C, D 클래스를 가져다 쓰고, 그쪽은 내 클래스를 모른다 (단방향 의존). 다른 파트와 연결하는 규칙은 `ReservationService` 한 곳에만 둔다.
 
 ## 2. 클래스별 역할
 
@@ -30,6 +34,7 @@ ReservationManager ──> SeatManager ──> Theater (A)
 | `Reservation` | 엔티티 | 한 번의 예약 기록. 누가(Member), 어느 상영(Screening), 어떤 좌석(Seat)들, 어떤 티켓(Ticket)들, 총액, 예약 시각, 상태 |
 | `SeatManager` | 관리 | `Theater`의 좌석 ID 문자열("A1")을 `Seat` 객체로 변환. 상영관별로 캐싱 |
 | `ReservationManager` | 관리 | 예약 생성·취소·조회, 좌석 가용 여부 판단, 중복 예약 방지 |
+| `ReservationService` | 서비스 | 예약의 진입점. 회원(D)·상영(A)·요금(C)·예약(B)을 한 흐름으로 묶는다 |
 
 ### Seat
 - 필드: `seatId`(예: "A1"), `row`, `col`
@@ -93,26 +98,47 @@ RESERVED --취소------> CANCELLED
 
 3번까지 통과해야 저장하므로, 일부만 예약되는 일은 없다. 좌석 한 개마다 티켓 한 개가 대응하므로 성인·청소년 티켓을 섞어서 한 번에 예약할 수 있다.
 
+### ReservationService
+회원, 상영, 요금, 좌석 예약을 한 흐름으로 묶는 진입점이다. 다른 파트 클래스를 고치지 않고 공개 메서드만 호출한다.
+
+| 메서드 | 설명 |
+|---|---|
+| `reserve(memberId, screeningId, seatIds, tickets)` | 회원·상영 조회 → 지난 상영 차단 → 티켓별 요금을 `PriceService`로 계산해 합산 → 좌석을 잡음(`PENDING`) |
+| `completePayment(memberId, reservationId, succeeded)` | 성공: 확정(`RESERVED`) 후 `member.recordPayment()`로 포인트 적립. 실패: `failPayment()`로 좌석 해제 |
+| `cancel(memberId, reservationId)` | 본인 예약만 취소 |
+| `getAvailableSeats(screeningId)` | 비어 있는 좌석 |
+| `getMyReservations(memberId)` | 내 예약 (취소 포함) |
+| `removeScreening(screeningId)` | 예약(결제 대기 포함)이 남은 상영은 삭제 불가, 없으면 `MovieService`에 위임 |
+
+이 클래스가 보장하는 규칙
+- 총액은 호출한 쪽이 넘긴 값을 믿지 않고 `PriceService`로 직접 계산한다.
+- 본인 예약만 결제·취소할 수 있다.
+- 이미 시작한 상영은 예약할 수 없다.
+- 포인트는 결제 성공 시에만 적립되고, 같은 예약을 두 번 결제해도 중복 적립되지 않는다.
+- 취소해도 적립된 포인트는 환수하지 않는다 (D 파트 `Member`를 고치지 않기 위한 결정, 한계로 인정).
+
 ## 3. 설계 결정
 
 1. **좌석에 예약 여부를 두지 않는다.** 좌석은 상영관 소속이라 모든 회차가 공유한다. 회차별 상태는 예약 기록에서 계산해야 꼬이지 않는다.
 2. **취소는 상태 변경.** 삭제하지 않아 기록이 남고, 좌석은 자동으로 다시 열린다.
 3. **예약 후 결제.** 결제를 먼저 받으면 결제하는 사이 다른 사람이 같은 좌석을 가져가 환불해야 할 수 있다. 실제 예매처럼 좌석을 먼저 잡고(`PENDING`) 결제 성공 시 확정한다. 결제 실패는 별도 코드 없이 기존 취소 로직(`CANCELLED`)으로 좌석이 풀린다.
 4. **전부 성공 또는 전부 실패.** 모든 검증을 끝낸 뒤에 저장한다.
-5. **요금 계산과 결제는 하지 않는다.** C의 `PriceService`, `PaymentService` 책임이다. `reserve()`는 계산된 총액을 받고, 결제 결과는 `confirm()`/`failPayment()`로 전달받는다.
-6. **예외 구분.** 잘못된 입력은 `IllegalArgumentException`, 상태 때문에 불가능한 경우(이미 예약된 좌석, 이미 취소된 예약)는 `IllegalStateException`.
+5. **요금 계산은 C를 호출해서 한다.** `ReservationManager`는 총액을 받기만 하고, `ReservationService`가 `PriceService`로 계산해서 넘긴다. 결제 자체(`PaymentService`)는 아직 비어 있어 결제 성공 여부를 `completePayment()`가 받는다.
+6. **서비스 계층을 둔 이유.** 파트 사이 연결 규칙(총액 계산, 본인 확인, 포인트 적립, 상영 삭제 보호)을 한 곳에 모으면 각 파트 클래스는 자기 책임만 가진다(SRP). 파트가 바뀌어도 이 클래스만 고치면 된다.
+7. **예외 구분.** 잘못된 입력은 `IllegalArgumentException`, 상태 때문에 불가능한 경우(이미 예약된 좌석, 이미 취소된 예약)는 `IllegalStateException`.
 
 ## 4. 다른 파트와의 연결
 
 | 파트 | 연결 지점 |
 |---|---|
-| A (movie) | `Screening`, `Theater`를 사용. `MovieService.removeScreening` 전에 `hasActiveReservation()`으로 예약 여부를 확인할 수 있음 |
+| A (movie) | `MovieService`로 상영을 조회. 상영 삭제는 `ReservationService.removeScreening()`을 거치면 예약 여부를 먼저 확인함 (`MovieService.removeScreening`을 직접 부르면 확인하지 않음) |
 | C (ticket) | `com.cinema.pricing.Ticket`을 사용. 총액은 `PriceService.calculatePrice()` 결과를 합산해서 `reserve()`에 전달. 결제 성공 시 `confirm()`, 실패 시 `failPayment()`를 호출 (`PaymentService`는 아직 구현 전) |
-| D (member) | `Member`를 사용. 결제 후 `recordPayment()` 호출은 호출하는 쪽(서비스)에서 처리 |
+| D (member) | `MemberManager`로 회원 조회. 결제 성공 시 `ReservationService`가 `recordPayment()`를 호출 |
 
 ## 5. 테스트
 
 `src/test/java/com/cinema/reservation/ReservationManagerTest.java` (41건, JUnit 없이 `main`으로 실행)
+`src/test/java/com/cinema/reservation/ReservationServiceTest.java` (31건): 회원·상영·요금·예약이 이어지는 통합 흐름
 
 - 좌석 예약, 남은/예약된 좌석 조회
 - 같은 회차·같은 좌석 중복 예약 방지, 일부만 겹쳐도 전체 거부
@@ -121,6 +147,7 @@ RESERVED --취소------> CANCELLED
 - 취소 후 상태, 재취소·없는 예약 취소 예외, 취소한 좌석 재예약
 - 결제 흐름: 결제 대기 중 좌석 점유와 중복 거부, 결제 성공 시 확정, 결제 실패 시 좌석 해제와 재예약, 잘못된 상태 전이 거부
 - 성인·청소년 티켓을 섞은 여러 좌석 동시 예약
+- (`ReservationServiceTest`) 할인 정책별 총액 계산, 결제 성공 시 포인트 적립과 중복 적립 방지, 결제 실패 시 좌석 해제, 없는 회원·상영, 지난 상영, 남의 예약 처리 거부, 예약이 있는 상영 삭제 거부
 
 실행 (A, C 브랜치가 합쳐진 상태에서):
 
@@ -132,7 +159,9 @@ java -cp out com.cinema.reservation.ReservationManagerTest
 ## 6. 앞으로 할 일
 
 - 저장: 예약이 메모리에만 있어서 종료하면 사라진다. D의 `DataManager`와 연동하거나 `ReservationRepository` 인터페이스를 따로 둘지 협의 필요
-- 서비스: 예약, 결제, 포인트를 묶는 `ReservationService`는 팀 합의 후 결정. 결제 단계(`PaymentService`)가 구현되면 `reserve` → 결제 → `confirm`/`failPayment` 순서로 연결
+- 결제: `PaymentService`가 구현되면 `completePayment()`의 성공 여부를 그 결과로 대체
+- 포인트 환수: 취소 시 적립 포인트를 되돌리는 기능은 `Member`(D) 수정이 필요해서 보류
+- 회원 등급 할인: `PriceService`가 회원 정보를 받지 않아 요금에 반영되지 않음 (C와 협의 필요)
 - 결제 대기 타임아웃: 현재는 결제 대기 예약이 자동으로 풀리지 않는다. 필요하면 예약 시각 기준으로 N분 뒤 만료 처리 추가
 - `SeatReservation`: 클래스 계획에 있었으나 `Reservation`이 좌석 목록을 직접 갖고 있어 만들지 않았다
 - 좌석 ID 형식(영문 한 글자 + 숫자)과 `Theater`↔`Seat` 연동 방식은 A와 확인 필요
