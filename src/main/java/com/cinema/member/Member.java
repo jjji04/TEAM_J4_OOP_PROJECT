@@ -51,6 +51,19 @@ public class Member {
         return earned;
     }
 
+    /** 환불 시 결제 당시 적립된 포인트와 누적 결제금액을 되돌린다. */
+    public void recordRefund(int paidAmount, int earnedPoints) {
+        if (paidAmount <= 0 || paidAmount > totalPaidAmount || earnedPoints < 0) {
+            throw new IllegalArgumentException("환불 정보 오류");
+        }
+        if (earnedPoints > points) {
+            throw new IllegalStateException("적립 포인트가 이미 사용되어 환불할 수 없습니다.");
+        }
+        points -= earnedPoints;
+        totalPaidAmount -= paidAmount;
+        updateGrade();
+    }
+
     /**
      * 포인트 사용 (결제 시 차감). 써도 누적 결제금액은 그대로라 등급 유지.
      * 규칙: 보유 1,000P 이상일 때만, 100P 단위로, 보유량 이내에서
