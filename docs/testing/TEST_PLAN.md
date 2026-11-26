@@ -7,6 +7,8 @@
 | 좌석 예약 | 예약 가능한 좌석 선택 및 저장 | 통과 (ReservationManagerTest) |
 | 중복 예약 | 같은 회차·좌석의 중복 예약 방지 | 통과 (ReservationManagerTest) |
 | 예약 취소 | 취소한 좌석이 다시 예약 가능 | 통과 (ReservationManagerTest) |
+| 결제 실패 | 결제 실패 시 잡아 둔 좌석이 풀리고, 결제 성공 시 확정 | 통과 (ReservationManagerTest) |
+| 여러 좌석·여러 티켓 | 성인·청소년 티켓을 섞어 여러 좌석을 한 번에 예약 | 통과 (ReservationManagerTest) |
 | 할인 계산 | 정책에 따라 최종 요금 계산 | 미실행 |
 | 회원 로그인 | 올바른 계정으로 로그인 | 미실행 |
 | 데이터 저장 | 프로그램 재실행 후 저장된 데이터 유지 | 미실행 |
